@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="Basket Payment Tracker", layout="mobile")
+st.set_page_config(page_title="Basket Payment Tracker", layout="centered")
 DATA_FILE = "basket_data.csv"
 
 # --- FUNCTIONS ---
