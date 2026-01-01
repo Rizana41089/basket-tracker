@@ -86,10 +86,19 @@ is_player_mode = (view_mode == "player")
 df = load_data()
 
 # --- 1. ADMIN SIDEBAR (KHUSUS ADMIN) --------------------------------
+# --- 1. ADMIN SIDEBAR -----------------------------------------------
 if not is_player_mode:
     with st.sidebar:
         st.header("⚙️ Admin Dashboard")
-        t_a, t_b = st.tabs(["➕ Buat Match", "📂 Manage & Bukti"])
+        
+        # --- TOMBOL REFRESH MANUAL ---
+        if st.button("🔄 Refresh Data App", use_container_width=True):
+            st.rerun()
+        
+        st.divider()
+        
+        adm_tab1, adm_tab2 = st.tabs(["📝 Buat Baru", "📂 Manage/Foto"])
+        # ... sisanya tetap sama ...
         
         with t_a:
             with st.form("new"):
