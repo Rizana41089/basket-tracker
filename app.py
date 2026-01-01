@@ -86,19 +86,18 @@ is_player_mode = (view_mode == "player")
 df = load_data()
 
 # --- 1. ADMIN SIDEBAR (KHUSUS ADMIN) --------------------------------
-# --- 1. ADMIN SIDEBAR -----------------------------------------------
 if not is_player_mode:
     with st.sidebar:
         st.header("⚙️ Admin Dashboard")
         
-        # --- TOMBOL REFRESH MANUAL ---
+        # Tombol Refresh Manual
         if st.button("🔄 Refresh Data App", use_container_width=True):
             st.rerun()
-        
+            
         st.divider()
-        
-        adm_tab1, adm_tab2 = st.tabs(["📝 Buat Baru", "📂 Manage/Foto"])
-        # ... sisanya tetap sama ...
+
+        # Pastikan variabel t_a dan t_b didefinisikan di sini
+        t_a, t_b = st.tabs(["➕ Buat Match", "📂 Manage & Bukti"])
         
         with t_a:
             with st.form("new"):
@@ -109,6 +108,8 @@ if not is_player_mode:
                     names = [''.join([i for i in l if not i.isdigit() and i != '.']).strip() for l in n_in.split('\n') if l.strip()]
                     new_rows = pd.DataFrame({"Date": [str(d_in)]*len(names), "Field_Name": [f_in]*len(names), "Player_Name": names, "Status": ["❌ Belum"]*len(names), "Timestamp": [datetime.now().strftime("%Y-%m-%d")]*len(names)})
                     save_data(pd.concat([load_data(), new_rows], ignore_index=True))
+                    st.success("Berhasil dibuat!")
+                    time.sleep(1)
                     st.rerun()
         
         with t_b:
@@ -122,7 +123,7 @@ if not is_player_mode:
                 
                 st.divider()
                 
-                # --- GALERI FOTO DI SINI (KHUSUS ADMIN) ---
+                # Galeri Foto Admin
                 st.write("📸 **Galeri Bukti Transfer**")
                 h_data = df[df['Date'] == sel_h]
                 f_h_name = h_data['Field_Name'].iloc[0]
@@ -131,13 +132,11 @@ if not is_player_mode:
                 p_transfer = h_data[h_data['Status'] == "💳 Transfer"]['Player_Name'].tolist()
                 
                 if p_transfer:
-                    # Download ZIP
                     if os.path.exists(m_folder) and len(os.listdir(m_folder)) > 0:
                         shutil.make_archive(m_folder, 'zip', m_folder)
                         with open(m_folder + ".zip", "rb") as fp:
                             st.download_button("📦 Download Semua (.ZIP)", fp, f"Bukti_{sel_h}.zip", "application/zip")
                     
-                    # Grid Galeri
                     cols = st.columns(3)
                     for idx, p in enumerate(p_transfer):
                         f_p = get_proof_filename(m_folder, p)
@@ -150,7 +149,7 @@ if not is_player_mode:
                     st.write("Belum ada bukti.")
 
                 st.divider()
-                if st.button(f"🗑️ Hapus Jadwal {sel_h}", type="secondary"):
+                if st.button(f"🗑️ Hapus Jadwal {sel_h}", type="secondary", use_container_width=True):
                     save_data(df[df['Date'] != sel_h])
                     if os.path.exists(m_folder): shutil.rmtree(m_folder)
                     st.rerun()
