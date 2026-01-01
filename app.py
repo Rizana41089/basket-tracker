@@ -150,31 +150,31 @@ if not is_player_mode:
 if df.empty:
     st.info("👋 Belum ada match aktif.")
 else:
-    all_dates = sorted(df['Date'].unique(), reverse=True)
+    available_dates = sorted(df['Date'].unique(), reverse=True)
     
-    # Logic Link Spesifik Tanggal
-    if target_date_param and target_date_param in all_dates:
+    if target_date_param and target_date_param in available_dates:
         selected_date = target_date_param
     else:
         col_s, _ = st.columns([2,1])
         with col_s:
-            selected_date = st.selectbox("📅 Jadwal Main:", all_dates)
+            selected_date = st.selectbox("📅 Jadwal Main:", available_dates)
     
     curr = df[df['Date'] == selected_date].copy()
     f_name = curr['Field_Name'].iloc[0]
     folder = get_match_folder(selected_date, f_name)
 
+    # --- BAGIAN JUDUL (Sinkron dengan Page Title) ---
+    # Kita ambil judul dari config di paling atas (Basket Payment)
+    page_title_name = "Basket Payment" 
+    st.title(f"🏀 {page_title_name}")
+    st.caption(f"📍 Lapangan: {f_name} | 📅 Tanggal: {selected_date}")
+    # ------------------------------------------------
+
     # Locking Detection
     curr['Lunas'] = False
     for i, r in curr.iterrows():
-        # Lunas jika ada file transfer ATAU statusnya Cash
         if os.path.exists(get_proof_filename(folder, r['Player_Name'])) or r['Status'] == "💵 Cash":
             curr.at[i, 'Lunas'] = True
-
-    # --- PERUBAHAN HEADER & CAPTION DI SINI ---
-    st.title(f"🏀 {page_title_name}")
-    st.caption(f"📍 Lapangan: {f_name} | 📅 Tanggal: {selected_date}")
-    # ------------------------------------------
 
     # TOMBOL LAPOR
     yet_to_pay = curr[curr['Lunas'] == False]['Player_Name'].tolist()
@@ -186,7 +186,7 @@ else:
 
     st.divider()
 
-    # TABEL STATUS (Read Only & Bersih)
+    # TABEL STATUS
     st.write("📋 **Status Pembayaran:**")
     st.dataframe(
         curr[["Player_Name", "Status"]],
@@ -194,7 +194,7 @@ else:
         hide_index=True,
         use_container_width=True
     )
-
+    
     # INFO LUNAS (Footer)
     done = curr[curr['Lunas'] == True]['Player_Name'].tolist()
     if done:
