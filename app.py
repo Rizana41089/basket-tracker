@@ -172,7 +172,7 @@ else:
             curr.at[i, 'Lunas'] = True
 
     # --- PERUBAHAN HEADER & CAPTION DI SINI ---
-    st.title(f"🏀 {f_name}")
+    st.title(f"🏀 {page_title_name}")
     st.caption(f"📍 Lapangan: {f_name} | 📅 Tanggal: {selected_date}")
     # ------------------------------------------
 
