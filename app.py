@@ -21,7 +21,7 @@ def save_data(df):
 # --- STYLE CSS ------------------------------------------------------
 st.markdown("""
     <style>
-    .stApp {max-width: 600px; margin: 0 auto;}
+    /* .stApp {max-width: 600px; margin: 0 auto;}  <-- INI YG BIKIN SEMPIT, KU HAPUS */
     .block-container {padding-top: 2rem; padding-bottom: 5rem;}
     /* Sembunyikan tombol menu default Streamlit di pojok kanan atas biar bersih */
     #MainMenu {visibility: hidden;}
