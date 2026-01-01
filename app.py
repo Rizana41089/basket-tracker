@@ -171,8 +171,10 @@ else:
         if os.path.exists(get_proof_filename(folder, r['Player_Name'])) or r['Status'] == "💵 Cash":
             curr.at[i, 'Lunas'] = True
 
-    st.subheader(f"🏀 {f_name}")
-    st.caption(f"Tanggal: {selected_date}")
+    # --- PERUBAHAN HEADER & CAPTION DI SINI ---
+    st.title(f"🏀 {f_name}")
+    st.caption(f"📍 Lapangan: {f_name} | 📅 Tanggal: {selected_date}")
+    # ------------------------------------------
 
     # TOMBOL LAPOR
     yet_to_pay = curr[curr['Lunas'] == False]['Player_Name'].tolist()
