@@ -24,37 +24,37 @@ def get_proof_filename(player_name, date):
     return f"{PROOF_DIR}/proof_{safe_name}_{date}.png"
 
 # --- MODAL POP-UP (DIALOG) ------------------------------------------
-# Ini fungsi khusus buat bikin jendela melayang
 @st.dialog("📤 Upload Bukti Transfer")
 def show_upload_modal(player_list, match_date):
     st.write(f"Match: {match_date}")
     
-    # Pilih nama (hanya yg statusnya transfer yg muncul disini nanti)
-    who = st.selectbox("Siapa yang sudah transfer?", player_list)
-    
+    who = st.selectbox("Siapa yang mau upload?", player_list)
     uploaded_file = st.file_uploader("Pilih Screenshot Bukti", type=['jpg','png','jpeg'])
     
     if uploaded_file:
-        if st.button("Kirim Bukti", type="primary"):
-            # Simpan File
+        if st.button("Kirim & Kunci Data", type="primary"):
             file_path = get_proof_filename(who, match_date)
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             
-            st.success("Berhasil terkirim! Jendela ini akan tertutup.")
+            # Update Status di CSV jadi 'Transfer' (Locking logic)
+            df = load_data()
+            mask = (df['Date'] == match_date) & (df['Player_Name'] == who)
+            df.loc[mask, 'Status'] = "💳 Transfer"
+            df.loc[mask, 'Timestamp'] = datetime.now().strftime("%Y-%m-%d")
+            save_data(df)
+
+            st.success("✅ Berhasil! Status kamu sekarang TERKUNCI.")
             time.sleep(1.5)
             st.rerun()
 
 # --- STYLE CSS ------------------------------------------------------
 st.markdown("""
     <style>
-    .block-container {padding-top: 2rem; padding-bottom: 5rem;}
+    .block-container {padding-top: 1rem; padding-bottom: 5rem;}
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    /* Bikin tombol upload lebih menonjol */
-    div.stButton > button:first-child {
-        width: 100%;
-    }
+    div.stButton > button:first-child { width: 100%; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -69,110 +69,73 @@ if not is_player_mode:
     with st.sidebar:
         st.header("⚙️ Admin Dashboard")
         
-        # GALERI BUKTI
+        # --- TAB MENU ADMIN ---
+        # Biar rapi, kita bagi jadi 2 tab di sidebar
+        adm_tab1, adm_tab2 = st.tabs(["📝 Buat Baru", "📂 History & Edit"])
+        
+        # TAB 1: BUAT MATCH BARU
+        with adm_tab1:
+            st.write("**Buat Match Baru**")
+            with st.form("new_match"):
+                date_in = st.date_input("Tanggal")
+                field_in = st.text_input("Lapangan", "GOR Basket")
+                names_in = st.text_area("Paste Nama", height=100)
+                if st.form_submit_button("🚀 Buat"):
+                    if names_in:
+                        lines = names_in.split('\n')
+                        clean_names = [''.join([i for i in l if not i.isdigit() and i != '.']).strip() for l in lines if l.strip()]
+                        if clean_names:
+                            # Cek duplikat tanggal (Opsional, tapi biar aman)
+                            # Disini kita allow multiple match same date beda lapangan, 
+                            # tapi untuk simplifikasi kita anggap tanggal = unik ID match.
+                            
+                            new_df = pd.DataFrame({
+                                "Date": [str(date_in)] * len(clean_names),
+                                "Field_Name": [field_in] * len(clean_names),
+                                "Player_Name": clean_names,
+                                "Status": ["❌ Belum"] * len(clean_names),
+                                "Timestamp": [datetime.now().strftime("%Y-%m-%d")] * len(clean_names)
+                            })
+                            combined = pd.concat([load_data(), new_df], ignore_index=True)
+                            save_data(combined)
+                            st.success("Match Created!")
+                            time.sleep(1)
+                            st.rerun()
+
+        # TAB 2: HISTORY & MANAGEMENT
+        with adm_tab2:
+            if df.empty:
+                st.info("Belum ada data match.")
+            else:
+                # Ambil list tanggal unik
+                all_dates = sorted(df['Date'].unique(), reverse=True)
+                selected_history = st.selectbox("Pilih Match utk dikelola:", all_dates)
+                
+                # Filter data
+                hist_data = df[df['Date'] == selected_history]
+                field_hist = hist_data['Field_Name'].iloc[0]
+                total_p = len(hist_data)
+                paid_count = len(hist_data[hist_data['Status'] != "❌ Belum"])
+                
+                st.info(f"📍 {field_hist}\n\n✅ Lunas: {paid_count}/{total_p} Pemain")
+                
+                # Fitur DELETE MATCH
+                st.write("")
+                if st.button(f"🗑️ Hapus Match {selected_history}", type="secondary"):
+                    # Logic Delete
+                    new_df_after_delete = df[df['Date'] != selected_history]
+                    save_data(new_df_after_delete)
+                    st.error(f"Match {selected_history} dihapus!")
+                    time.sleep(1)
+                    st.rerun()
+
+        st.divider()
+        # --- GALERI BUKTI (GLOBAL) ---
         with st.expander("📸 Cek Galeri Bukti", expanded=False):
             if df.empty:
                 st.write("Data kosong.")
             else:
-                latest_date = sorted(df['Date'].unique(), reverse=True)[0]
-                transfers = df[(df['Date'] == latest_date) & (df['Status'] == "💳 Transfer")]
-                if transfers.empty:
-                    st.caption("Belum ada transfer.")
-                else:
-                    for index, row in transfers.iterrows():
-                        p_name = row['Player_Name']
-                        fname = get_proof_filename(p_name, latest_date)
-                        if os.path.exists(fname):
-                            st.markdown(f"**{p_name}**")
-                            st.image(fname)
-                        else:
-                            st.caption(f"{p_name}: Belum upload")
-
-        st.divider()
-        st.subheader("🔗 Link Grup")
-        st.code("?view=player", language="text")
-        
-        st.divider()
-        with st.form("new_match"):
-            st.write("📝 **Buat Match Baru**")
-            date_in = st.date_input("Tanggal")
-            field_in = st.text_input("Lapangan", "GOR Basket")
-            names_in = st.text_area("Paste Nama", height=100)
-            if st.form_submit_button("🚀 Buat"):
-                if names_in:
-                    lines = names_in.split('\n')
-                    clean_names = [''.join([i for i in l if not i.isdigit() and i != '.']).strip() for l in lines if l.strip()]
-                    if clean_names:
-                        new_df = pd.DataFrame({
-                            "Date": [str(date_in)] * len(clean_names),
-                            "Field_Name": [field_in] * len(clean_names),
-                            "Player_Name": clean_names,
-                            "Status": ["❌ Belum"] * len(clean_names),
-                            "Timestamp": [datetime.now().strftime("%Y-%m-%d")] * len(clean_names)
-                        })
-                        combined = pd.concat([load_data(), new_df], ignore_index=True)
-                        save_data(combined)
-                        st.success("Match Created!")
-                        time.sleep(1)
-                        st.rerun()
-
-# --- 2. PLAYER VIEW (MAIN) ------------------------------------------
-
-if df.empty:
-    st.info("👋 Belum ada match aktif.")
-else:
-    # DATA SETUP
-    latest_date = sorted(df['Date'].unique(), reverse=True)[0]
-    current_match = df[df['Date'] == latest_date].copy()
-    field_name = current_match['Field_Name'].iloc[0]
-
-    # --- HEADER AREA ---
-    col_head1, col_head2 = st.columns([2, 1])
-    with col_head1: st.subheader(f"🏀 {field_name}")
-    with col_head2: st.caption(f"📅 {latest_date}")
-    
-    st.divider()
-
-    # --- ACTION BAR (TOMBOL UPLOAD DI ATAS) ---
-    # Kita cari siapa aja yang statusnya Transfer buat ngisi list di modal
-    transfer_players = current_match[current_match["Status"] == "💳 Transfer"]["Player_Name"].unique()
-    
-    # Tampilkan tombol Pop-up HANYA jika ada yang pilih Transfer
-    if len(transfer_players) > 0:
-        col_msg, col_btn = st.columns([1.5, 1])
-        with col_msg:
-            st.info(f"💡 Ada {len(transfer_players)} orang bayar via Transfer.")
-        with col_btn:
-            if st.button("📤 Upload Bukti", type="primary"):
-                show_upload_modal(transfer_players, latest_date)
-    
-    # --- TABLE EDITOR ---
-    st.caption("👇 Update statusmu di tabel ini:")
-    
-    edited_df = st.data_editor(
-        current_match[["Player_Name", "Status"]],
-        column_config={
-            "Player_Name": st.column_config.TextColumn("Nama", disabled=True),
-            "Status": st.column_config.SelectboxColumn(
-                "Status (Pilih 🔽)",
-                options=["❌ Belum", "💵 Cash", "💳 Transfer"],
-                required=True
-            )
-        },
-        hide_index=True,
-        use_container_width=True,
-        key="player_editor"
-    )
-
-    # --- SAVE BUTTON ---
-    # Tombol simpan tetap di bawah tabel agar flow-nya: Cek Nama -> Ganti Status -> Simpan
-    if st.button("💾 Simpan Perubahan Status"):
-        df_others = df[df['Date'] != latest_date]
-        edited_df['Date'] = latest_date
-        edited_df['Field_Name'] = field_name
-        edited_df['Timestamp'] = datetime.now().strftime("%Y-%m-%d")
-        final_df = pd.concat([df_others, edited_df], ignore_index=True)
-        save_data(final_df)
-        st.toast("Data tersimpan!", icon="✅")
-        time.sleep(0.5)
-        st.rerun()
+                # Cek file fisik untuk tanggal yg dipilih di History (kalau ada), atau latest
+                check_date = st.selectbox("Cek Galeri Tanggal:", sorted(df['Date'].unique(), reverse=True))
+                
+                players = df[df['Date'] == check_date
