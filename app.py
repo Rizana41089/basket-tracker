@@ -165,7 +165,7 @@ else:
 
     # --- BAGIAN JUDUL (Sinkron dengan Page Title) ---
     # Kita ambil judul dari config di paling atas (Basket Payment)
-    page_title_name = "Basket Payment" 
+    page_title_name = "BIB Checklist Payment" 
     st.title(f"🏀 {page_title_name}")
     st.caption(f"📍 Lapangan: {f_name} | 📅 Tanggal: {selected_date}")
     # ------------------------------------------------
