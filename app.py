@@ -5,7 +5,7 @@ from datetime import datetime
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Basket Payment Tracker", layout="centered")
-DATA_FILE = "basket_data.csv"
+DATA_FILE = "/tmp/basket_data.csv"
 
 # --- FUNCTIONS ---
 def load_data():
