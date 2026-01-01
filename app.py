@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 
 # --- CONFIG ---------------------------------------------------------
-st.set_page_config(page_title="Basket Payment", layout="centered")
+st.set_page_config(page_title="BIB Checklist Payment", layout="centered")
 base_tmp_dir = "/tmp/basket_app_files"
 DATA_FILE = f"{base_tmp_dir}/basket_data.csv"
 
