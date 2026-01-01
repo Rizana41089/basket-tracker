@@ -1,198 +1,145 @@
 import streamlit as st
 import pandas as pd
-import gspread
+import os
 from datetime import datetime
-from io import BytesIO
 
-# =========================
-# GOOGLE SHEETS CONNECTION
-# =========================
-@st.cache_resource
-def connect_gsheet():
-    gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
-    sh = gc.open_by_key(st.secrets["gsheet"]["sheet_id"])
-    return sh.sheet1  # first worksheet
+# --- CONFIGURATION ---
+st.set_page_config(page_title="Basket Payment Tracker", layout="mobile")
+DATA_FILE = "basket_data.csv"
 
-
-sheet = connect_gsheet()
-
-COLUMNS = [
-    "Date",
-    "Field_Name",
-    "Player_Name",
-    "Status",
-    "Timestamp",
-    "Proof_Filename"
-]
-
-STATUS_OPTIONS = ["Belum", "Cash", "Transfer"]
-
-
-# =========================
-# HELPERS
-# =========================
+# --- FUNCTIONS ---
 def load_data():
-    data = sheet.get_all_records()
-    return pd.DataFrame(data)
+    if os.path.exists(DATA_FILE):
+        return pd.read_csv(DATA_FILE)
+    else:
+        # Create empty dataframe if not exists
+        return pd.DataFrame(columns=["Date", "Field_Name", "Player_Name", "Status", "Timestamp"])
 
+def save_data(df):
+    df.to_csv(DATA_FILE, index=False)
 
-def append_rows(rows: list):
-    sheet.append_rows(rows, value_input_option="USER_ENTERED")
+# --- APP UI ---
+st.title("🏀 Basket Payment Tracker")
 
+# TABS
+tab1, tab2 = st.tabs(["📝 Player Checklist", "⚙️ Admin Setup"])
 
-def update_cell(row, col_name, value):
-    col_index = COLUMNS.index(col_name) + 1
-    sheet.update_cell(row, col_index, value)
-
-
-def download_csv(df):
-    return df.to_csv(index=False).encode("utf-8")
-
-
-# =========================
-# UI CONFIG
-# =========================
-st.set_page_config(
-    page_title="Basketball Payment Tracker",
-    layout="wide",
-)
-
-st.title("🏀 Basketball Community Payment Tracker")
-st.caption("Biar main basket, bukan main tebak-tebakan siapa yang belum bayar 😄")
-
-tab_admin, tab_player = st.tabs(["🛠 Admin Setup", "✅ Player Checklist"])
-
-
-# =========================
-# TAB 1 – ADMIN
-# =========================
-with tab_admin:
-    st.subheader("Generate Match")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        match_date = st.date_input("Tanggal Main", datetime.today())
-    with col2:
-        field_name = st.text_input("Nama Lapangan")
-
-    raw_names = st.text_area(
-        "Paste Nama Pemain (dari WhatsApp)",
-        placeholder="Contoh:\nAndi\nBudi\nCharlie\nDoni"
-    )
-
-    if st.button("🚀 Generate Match", use_container_width=True):
-        if not raw_names.strip():
-            st.warning("Nama pemain masih kosong, bro 😅")
-        else:
-            players = [n.strip() for n in raw_names.splitlines() if n.strip()]
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            rows = []
-            for p in players:
-                rows.append([
-                    str(match_date),
-                    field_name,
-                    p,
-                    "Belum",
-                    now,
-                    ""
-                ])
-
-            append_rows(rows)
-            st.success(f"✅ {len(players)} pemain berhasil ditambahkan!")
-
-    st.divider()
-
-    st.subheader("Download Data")
+# --- TAB 1: PLAYER CHECKLIST ---
+with tab1:
+    st.header("Cek & Bayar")
+    
     df = load_data()
-    if not df.empty:
-        st.download_button(
-            "⬇️ Download CSV",
-            data=download_csv(df),
-            file_name="basket_payment_report.csv",
-            mime="text/csv"
-        )
-
-
-# =========================
-# TAB 2 – PLAYER CHECKLIST
-# =========================
-with tab_player:
-    st.subheader("Checklist Pembayaran")
-
-    df = load_data()
+    
     if df.empty:
-        st.info("Belum ada match. Silakan generate dulu di tab Admin.")
-        st.stop()
-
-    # Filter match
-    col1, col2 = st.columns(2)
-    with col1:
-        selected_date = st.selectbox(
-            "Tanggal",
-            sorted(df["Date"].unique())
-        )
-    with col2:
-        selected_field = st.selectbox(
-            "Lapangan",
-            sorted(df[df["Date"] == selected_date]["Field_Name"].unique())
-        )
-
-    filtered = df[
-        (df["Date"] == selected_date) &
-        (df["Field_Name"] == selected_field)
-    ].reset_index(drop=True)
-
-    for i, row in filtered.iterrows():
-        sheet_row_index = df.index[
-            (df["Date"] == row["Date"]) &
-            (df["Field_Name"] == row["Field_Name"]) &
-            (df["Player_Name"] == row["Player_Name"])
-        ][0] + 2  # +2 karena header
-
-        bg_color = ""
-        if row["Status"] == "Cash":
-            bg_color = "background-color:#d4edda;"
-        elif row["Status"] == "Transfer":
-            bg_color = "background-color:#fff3cd;"
-
-        st.markdown(
-            f"<div style='padding:10px; border-radius:8px; {bg_color}'>",
-            unsafe_allow_html=True
-        )
-
-        col1, col2, col3 = st.columns([3, 2, 3])
-        with col1:
-            st.write(f"👤 **{row['Player_Name']}**")
-
-        with col2:
-            new_status = st.selectbox(
-                "Status",
-                STATUS_OPTIONS,
-                index=STATUS_OPTIONS.index(row["Status"]),
-                key=f"status_{i}"
-            )
-
-        with col3:
-            proof_file = None
-            if new_status == "Transfer":
-                proof_file = st.file_uploader(
-                    "Bukti Transfer",
-                    type=["jpg", "jpeg", "png"],
-                    key=f"proof_{i}"
+        st.info("Belum ada match yang dibuat Admin. Cek lagi nanti ya!")
+    else:
+        # Filter to show mostly recent match (optional logic, showing all for now)
+        match_dates = df['Date'].unique()
+        selected_date = st.selectbox("Pilih Tanggal Match:", match_dates)
+        
+        # Show Field Name
+        field_name = df[df['Date'] == selected_date]['Field_Name'].iloc[0]
+        st.caption(f"📍 Lokasi: {field_name}")
+        
+        # Filter Data
+        match_data = df[df['Date'] == selected_date].copy()
+        
+        # Display Interactive Editor
+        # Player can change their status here
+        st.write("Cari namamu dan update status:")
+        
+        edited_df = st.data_editor(
+            match_data[["Player_Name", "Status"]],
+            column_config={
+                "Status": st.column_config.SelectboxColumn(
+                    "Status Pembayaran",
+                    options=["Belum", "Cash", "Transfer"],
+                    required=True
                 )
+            },
+            hide_index=True,
+            use_container_width=True,
+            key="editor"
+        )
+        
+        # Save Button logic (Simplification for CSV)
+        # In data_editor, we need to capture changes. 
+        # But for simple MVP, let's use a button to commit changes if needed 
+        # OR usually data_editor updates state. 
+        
+        # Let's simplify: Just show list and individual update buttons if editor is tricky?
+        # No, Data Editor is best. Let's merge changes.
+        
+        if st.button("💾 Simpan Perubahan Status"):
+            # Update main DF with changes from editor
+            # This is a bit tricky in pandas logic, so let's keep it simple:
+            # We overwrite the rows for this date
+            
+            # 1. Drop old rows for this date
+            df = df[df['Date'] != selected_date]
+            
+            # 2. Add back the edited rows (adding back the missing columns)
+            edited_df['Date'] = selected_date
+            edited_df['Field_Name'] = field_name
+            edited_df['Timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            final_df = pd.concat([df, edited_df], ignore_index=True)
+            save_data(final_df)
+            st.success("Data berhasil diupdate! Makasih udah lapor.")
+            st.rerun()
 
-        # Update logic
-        if new_status != row["Status"]:
-            update_cell(sheet_row_index, "Status", new_status)
-            update_cell(
-                sheet_row_index,
-                "Timestamp",
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            )
-            st.toast(f"{row['Player_Name']} updated ke {new_status}")
+        # Upload Proof Section
+        st.divider()
+        st.subheader("Upload Bukti Transfer")
+        uploader_name = st.selectbox("Nama Kamu:", match_data['Player_Name'].unique())
+        uploaded_file = st.file_uploader("Upload screenshot (Opsional)", type=['png', 'jpg', 'jpeg'])
+        if uploaded_file is not None:
+            st.success(f"Mantap {uploader_name}, bukti transfer diterima! (Disimpan sementara)")
 
-        if proof_file:
-            update_cell(sheet_row_index, "Proof_Filename", proof_file.name)
+# --- TAB 2: ADMIN SETUP ---
+with tab2:
+    st.header("Admin Setup")
+    
+    with st.form("new_match_form"):
+        match_date = st.date_input("Tanggal Main")
+        field_input = st.text_input("Nama Lapangan", "GOR Basket")
+        raw_names = st.text_area("Paste List Nama dari WA", height=200, placeholder="1. Budi\n2. Anto\n3. ...")
+        
+        submitted = st.form_submit_button("Buat Match Baru")
+        
+        if submitted and raw_names:
+            # Parse names
+            lines = raw_names.split('\n')
+            clean_names = []
+            for line in lines:
+                # Remove numbers like "1. " or "2."
+                clean_name = ''.join([i for i in line if not i.isdigit() and i != '.']).strip()
+                if clean_name:
+                    clean_names.append(clean_name)
+            
+            if clean_names:
+                # Create new dataframe rows
+                new_data = pd.DataFrame({
+                    "Date": [str(match_date)] * len(clean_names),
+                    "Field_Name": [field_input] * len(clean_names),
+                    "Player_Name": clean_names,
+                    "Status": ["Belum"] * len(clean_names),
+                    "Timestamp": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")] * len(clean_names)
+                })
+                
+                # Append to existing CSV
+                current_df = load_data()
+                combined_df = pd.concat([current_df, new_data], ignore_index=True)
+                save_data(combined_df)
+                
+                st.success(f"Match tanggal {match_date} berhasil dibuat dengan {len(clean_names)} pemain!")
+            else:
+                st.error("Gagal baca nama. Pastikan formatnya bener ya.")
 
-        st.markdown("</div>", unsafe_allow_html=True)
+    # Reset Data Button
+    st.divider()
+    if st.button("⚠️ Hapus Semua Data (Reset)"):
+        if os.path.exists(DATA_FILE):
+            os.remove(DATA_FILE)
+            st.warning("Data bersih kembali seperti baru.")
+            st.rerun()
