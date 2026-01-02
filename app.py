@@ -17,9 +17,10 @@ if not os.path.exists(base_tmp_dir):
 # --- KONEKSI GOOGLE SHEETS (VERSI FIX 404) ---------------------------
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Gunakan ID dari link yang kamu berikan
+# ✅ BENAR - Kirim SHEET_ID langsung
 SHEET_ID = "1hd4yQ0-OfK7SbOMqdgWycb7kB2oNjzOPvfr8vveS-fM"
-URL_SHEET = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid=0"
+conn.read(spreadsheet=SHEET_ID, worksheet="Sheet1", ttl=0)
+conn.update(spreadsheet=SHEET_ID, worksheet="Sheet1", data=df)
 
 def load_data():
     try:
