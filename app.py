@@ -3,38 +3,62 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import os
 import time
-import shutil
 from datetime import datetime
 
-# --- CONFIG ---------------------------------------------------------
-PAGE_TITLE = "BIB Checklist Payment"
-st.set_page_config(page_title=PAGE_TITLE, layout="centered")
+# --- CONFIG ---
+NAMA_APLIKASI = "BIB Checklist Payment"
+st.set_page_config(page_title=NAMA_APLIKASI, layout="centered")
 
-base_tmp_dir = "/tmp/basket_app_files"
-if not os.path.exists(base_tmp_dir):
-    os.makedirs(base_tmp_dir)
+# URL Google Sheet kamu (GANTI DENGAN URL ASLI KAMU)
+SQL_URL = "https://docs.google.com/spreadsheets/d/1hd4yQ0-OfK7SbOMqdgWycb7kB2oNjzOPvfr8vveS-fM/edit?usp=sharing"
 
-# --- KONEKSI GOOGLE SHEETS ------------------------------------------
+# --- KONEKSI GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        # ttl=0 penting agar data yang ditarik selalu yang terbaru (bukan cache)
-        return conn.read(ttl=0)
-    except Exception as e:
-        st.error(f"Gagal membaca Google Sheets: {e}")
+        # Mengambil data dari Google Sheets
+        return conn.read(spreadsheet=SQL_URL, worksheet="Sheet1")
+    except:
         return pd.DataFrame(columns=["Date", "Field_Name", "Player_Name", "Status", "Timestamp"])
 
 def save_data(df):
+    # Mengupdate data ke Google Sheets
+    conn.update(spreadsheet=SQL_URL, worksheet="Sheet1", data=df)
+    st.cache_data.clear()
+
+# --- SISANYA TETAP MENGGUNAKAN LOGIC SEBELUMNYA ---
+# (Gunakan fungsi load_data() dan save_data() yang baru ini di dalam kode kamu)import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
+import os
+import time
+from datetime import datetime
+
+# --- CONFIG ---
+NAMA_APLIKASI = "BIB Checklist Payment"
+st.set_page_config(page_title=NAMA_APLIKASI, layout="centered")
+
+# URL Google Sheet kamu (GANTI DENGAN URL ASLI KAMU)
+SQL_URL = "https://docs.google.com/spreadsheets/d/URL_SHEET_KAMU_DI_SINI/edit#gid=0"
+
+# --- KONEKSI GOOGLE SHEETS ---
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+def load_data():
     try:
-        # Menulis kembali seluruh dataframe ke Google Sheets
-        conn.update(data=df)
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        st.error("Gagal menyimpan ke Google Sheets. Pastikan akses Share diatur ke 'Anyone with link can EDIT'")
-        st.info(f"Detail Error: {e}")
-        return False
+        # Mengambil data dari Google Sheets
+        return conn.read(spreadsheet=SQL_URL, worksheet="Sheet1")
+    except:
+        return pd.DataFrame(columns=["Date", "Field_Name", "Player_Name", "Status", "Timestamp"])
+
+def save_data(df):
+    # Mengupdate data ke Google Sheets
+    conn.update(spreadsheet=SQL_URL, worksheet="Sheet1", data=df)
+    st.cache_data.clear()
+
+# --- SISANYA TETAP MENGGUNAKAN LOGIC SEBELUMNYA ---
+# (Gunakan fungsi load_data() dan save_data() yang baru ini di dalam kode kamu)
 
 # --- FILE & FOTO FUNCTIONS ------------------------------------------
 def get_match_folder(date_str, field_name):
