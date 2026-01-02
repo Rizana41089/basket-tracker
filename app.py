@@ -19,15 +19,22 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        # Mengambil data terbaru dari Google Sheets
-        return conn.read(ttl="0s") # ttl=0 agar selalu ambil data terbaru
-    except:
+        # ttl=0 penting agar data yang ditarik selalu yang terbaru (bukan cache)
+        return conn.read(ttl=0)
+    except Exception as e:
+        st.error(f"Gagal membaca Google Sheets: {e}")
         return pd.DataFrame(columns=["Date", "Field_Name", "Player_Name", "Status", "Timestamp"])
 
 def save_data(df):
-    # Menyimpan data kembali ke Google Sheets
-    conn.update(data=df)
-    st.cache_data.clear()
+    try:
+        # Menulis kembali seluruh dataframe ke Google Sheets
+        conn.update(data=df)
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error("Gagal menyimpan ke Google Sheets. Pastikan akses Share diatur ke 'Anyone with link can EDIT'")
+        st.info(f"Detail Error: {e}")
+        return False
 
 # --- FILE & FOTO FUNCTIONS ------------------------------------------
 def get_match_folder(date_str, field_name):
@@ -46,7 +53,6 @@ def get_proof_filename(folder_path, player_name):
 @st.dialog("📝 Update Status Bayar")
 def show_update_modal(player_list, match_date, field_name):
     st.write(f"Lapor bayar untuk match: **{match_date}**")
-    
     who = st.selectbox("Pilih Namamu:", player_list)
     method = st.radio("Metode Pembayaran:", ["💵 Cash", "💳 Transfer"])
     
@@ -56,7 +62,6 @@ def show_update_modal(player_list, match_date, field_name):
     
     if st.button("Konfirmasi Pembayaran", type="primary"):
         df_all = load_data()
-        # Update baris yang sesuai di dataframe besar
         mask = (df_all['Date'] == match_date) & (df_all['Player_Name'] == who)
         df_all.loc[mask, 'Status'] = method
         df_all.loc[mask, 'Timestamp'] = datetime.now().strftime("%Y-%m-%d")
@@ -67,52 +72,34 @@ def show_update_modal(player_list, match_date, field_name):
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
         
-        save_data(df_all)
-        st.success(f"Berhasil! Terima kasih {who}.")
-        time.sleep(1)
-        st.rerun()
+        if save_data(df_all):
+            st.success(f"Berhasil! Terima kasih {who}.")
+            time.sleep(1)
+            st.rerun()
 
 # --- MODAL KONFIRMASI HAPUS (ADMIN) ---------------------------------
 @st.dialog("⚠️ Konfirmasi Hapus")
 def confirm_delete_modal(match_date, field_name):
     st.warning(f"Apakah Anda yakin ingin menghapus jadwal **{match_date}**?")
-    st.write("Data di Google Sheets dan file bukti transfer akan dihapus permanen.")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Ya, Hapus", type="primary", use_container_width=True):
-            # Hapus dari Google Sheets
-            df_all = load_data()
-            new_df = df_all[df_all['Date'] != match_date]
-            save_data(new_df)
-            
-            # Hapus folder foto jika ada
+    if st.button("Ya, Hapus Permanen", type="primary", use_container_width=True):
+        df_all = load_data()
+        new_df = df_all[df_all['Date'] != match_date]
+        if save_data(new_df):
             m_folder = get_match_folder(match_date, field_name)
             if os.path.exists(m_folder):
                 shutil.rmtree(m_folder)
-            
             st.success("Jadwal dihapus!")
             time.sleep(1)
             st.rerun()
-    with col2:
-        if st.button("Batal", use_container_width=True):
-            st.rerun()
+    if st.button("Batal", use_container_width=True):
+        st.rerun()
 
 # --- MODAL PREVIEW BUKTI --------------------------------------------
 @st.dialog("🔍 Detail Bukti")
 def show_image_preview(image_path, player_name):
     st.image(image_path, use_container_width=True, caption=f"Bukti Transfer: {player_name}")
 
-# --- STYLE CSS ------------------------------------------------------
-st.markdown("""
-    <style>
-    .block-container {padding-top: 1rem; padding-bottom: 5rem;}
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- MAIN LOGIC -----------------------------------------------------
+# --- MAIN LOGIC ---
 query_params = st.query_params
 view_mode = query_params.get("view")
 target_date_param = query_params.get("date")
@@ -120,15 +107,13 @@ is_player_mode = (view_mode == "player")
 
 df = load_data()
 
-# --- 1. ADMIN SIDEBAR (KHUSUS ADMIN) --------------------------------
+# --- 1. ADMIN SIDEBAR ---
 if not is_player_mode:
     with st.sidebar:
         st.header("⚙️ Admin Dashboard")
-        
         if st.button("🔄 Refresh Data App", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
-            
         st.divider()
 
         t_a, t_b = st.tabs(["➕ Buat Match", "📂 Manage & Bukti"])
@@ -149,103 +134,62 @@ if not is_player_mode:
                             "Status": ["❌ Belum"]*len(names), 
                             "Timestamp": [datetime.now().strftime("%Y-%m-%d")]*len(names)
                         })
-                        combined_df = pd.concat([load_data(), new_rows], ignore_index=True)
-                        def save_data(df):
-    # Menyimpan data kembali ke Google Sheets
-    # Pastikan Nama Worksheet sesuai (default biasanya "Sheet1")
-    conn.update(
-        data=df,
-        worksheet="Sheet1"
-    )
-    st.cache_data.clear()
+                        combined_df = pd.concat([df, new_rows], ignore_index=True)
+                        if save_data(combined_df):
+                            st.success("Berhasil disimpan ke Cloud!")
+                            time.sleep(1)
+                            st.rerun()
         
         with t_b:
             if not df.empty:
                 all_d = sorted(df['Date'].unique(), reverse=True)
                 sel_h = st.selectbox("Pilih Jadwal:", all_d)
-                
-                st.caption("🔗 Link untuk dibagikan ke grup:")
                 st.code(f"?view=player&date={sel_h}")
-                
                 st.divider()
                 
-                # Galeri Foto Admin
-                st.write("📸 **Galeri Bukti Transfer**")
                 h_data = df[df['Date'] == sel_h]
                 f_h_name = h_data['Field_Name'].iloc[0]
                 m_folder = get_match_folder(sel_h, f_h_name)
-                
                 p_transfer = h_data[h_data['Status'] == "💳 Transfer"]['Player_Name'].tolist()
                 
                 if p_transfer:
-                    if os.path.exists(m_folder) and len(os.listdir(m_folder)) > 0:
-                        shutil.make_archive(m_folder, 'zip', m_folder)
-                        with open(m_folder + ".zip", "rb") as fp:
-                            st.download_button("📦 Download ZIP", fp, f"Bukti_{sel_h}.zip", "application/zip")
-                    
                     cols = st.columns(3)
                     for idx, p in enumerate(p_transfer):
                         f_p = get_proof_filename(m_folder, p)
                         if os.path.exists(f_p):
                             with cols[idx % 3]:
-                                st.image(f_p, use_container_width=True)
+                                st.image(f_p)
                                 if st.button("🔍", key=f"adm_{p}"):
                                     show_image_preview(f_p, p)
-                else:
-                    st.write("Belum ada bukti.")
-
-                st.divider()
-                st.warning("⚠️ Zona Bahaya")
+                
                 if st.button(f"🗑️ Hapus Jadwal {sel_h}", type="secondary", use_container_width=True):
                     confirm_delete_modal(sel_h, f_h_name)
 
-# --- 2. PLAYER VIEW (TAMPILAN DEPAN) --------------------------------
+# --- 2. PLAYER VIEW ---
 if df.empty:
     st.info("👋 Belum ada match aktif.")
 else:
     available_dates = sorted(df['Date'].unique(), reverse=True)
-    
-    if target_date_param and target_date_param in available_dates:
-        selected_date = target_date_param
-    else:
-        col_s, _ = st.columns([2,1])
-        with col_s:
-            selected_date = st.selectbox("📅 Jadwal Main:", available_dates)
+    selected_date = target_date_param if (target_date_param in available_dates) else st.selectbox("📅 Jadwal:", available_dates)
     
     curr = df[df['Date'] == selected_date].copy()
     f_name = curr['Field_Name'].iloc[0]
     folder = get_match_folder(selected_date, f_name)
 
-    # Header
     st.title(f"🏀 {PAGE_TITLE}")
     st.caption(f"📍 Lapangan: {f_name} | 📅 Tanggal: {selected_date}")
 
-    # Locking Detection
+    # Detect Lunas
     curr['Lunas'] = False
     for i, r in curr.iterrows():
         if os.path.exists(get_proof_filename(folder, r['Player_Name'])) or r['Status'] == "💵 Cash":
             curr.at[i, 'Lunas'] = True
 
-    # Tombol Lapor
     yet_to_pay = curr[curr['Lunas'] == False]['Player_Name'].tolist()
     if yet_to_pay:
         if st.button("💳 LAPOR BAYAR / UPLOAD BUKTI", type="primary", use_container_width=True):
             show_update_modal(yet_to_pay, selected_date, f_name)
     else:
-        st.success("🎉 Semua pemain di jadwal ini sudah lunas!")
+        st.success("🎉 Semua pemain lunas!")
 
-    st.divider()
-
-    # Tabel Status
-    st.write("📋 **Status Pembayaran:**")
-    st.dataframe(
-        curr[["Player_Name", "Status"]],
-        column_config={"Player_Name": "Nama Pemain", "Status": "Status"},
-        hide_index=True,
-        use_container_width=True
-    )
-    
-    # Footer Info
-    done = curr[curr['Lunas'] == True]['Player_Name'].tolist()
-    if done:
-        st.caption(f"✅ Terverifikasi: {', '.join(done)}")
+    st.dataframe(curr[["Player_Name", "Status"]], hide_index=True, use_container_width=True)
