@@ -14,33 +14,26 @@ base_tmp_dir = "/tmp/basket_app_files"
 if not os.path.exists(base_tmp_dir):
     os.makedirs(base_tmp_dir)
 
-# --- GOOGLE SHEETS CONFIG (FIX HTTP 302 ERROR) ----------------------
-SHEET_ID = "1hd4yQ0-OfK7SbOMqdgWycb7kB2oNjzOPvfr8vveS-fM"
-CSV_EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+# --- KONEKSI GOOGLE SHEETS ------------------------------------------
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- LOAD DATA FROM GOOGLE SHEETS -----------------------------------
-@st.cache_data(ttl=300)
 def load_data():
-    """Load data dari Google Sheets menggunakan CSV export URL"""
     try:
-        response = requests.get(CSV_EXPORT_URL, timeout=10)
-        response.raise_for_status()
-        return pd.read_csv(StringIO(response.text))
+        # ttl=0 penting agar data yang ditarik selalu yang terbaru (bukan cache)
+        return conn.read(ttl=0)
     except Exception as e:
         st.error(f"Gagal membaca Google Sheets: {e}")
-        st.info("💡 Pastikan:\n1. Google Sheet sudah di-share (public)\n2. SHEET_ID benar\n3. Internet connection stabil")
         return pd.DataFrame(columns=["Date", "Field_Name", "Player_Name", "Status", "Timestamp"])
 
 def save_data(df):
-    """Simpan data ke CSV lokal (temporary solution)"""
     try:
-        csv_path = f"{base_tmp_dir}/data.csv"
-        df.to_csv(csv_path, index=False)
-        st.success("✅ Data disimpan ke storage lokal")
+        # Menulis kembali seluruh dataframe ke Google Sheets
+        conn.update(data=df)
         st.cache_data.clear()
         return True
     except Exception as e:
-        st.error(f"❌ Gagal menyimpan: {e}")
+        st.error("Gagal menyimpan ke Google Sheets. Pastikan akses Share diatur ke 'Anyone with link can EDIT'")
+        st.info(f"Detail Error: {e}")
         return False
 
 # --- FILE & FOTO FUNCTIONS ------------------------------------------
