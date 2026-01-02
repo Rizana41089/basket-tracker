@@ -150,10 +150,14 @@ if not is_player_mode:
                             "Timestamp": [datetime.now().strftime("%Y-%m-%d")]*len(names)
                         })
                         combined_df = pd.concat([load_data(), new_rows], ignore_index=True)
-                        save_data(combined_df)
-                        st.success("Berhasil dibuat di Google Sheets!")
-                        time.sleep(1)
-                        st.rerun()
+                        def save_data(df):
+    # Menyimpan data kembali ke Google Sheets
+    # Pastikan Nama Worksheet sesuai (default biasanya "Sheet1")
+    conn.update(
+        data=df,
+        worksheet="Sheet1"
+    )
+    st.cache_data.clear()
         
         with t_b:
             if not df.empty:
