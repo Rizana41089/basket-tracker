@@ -19,7 +19,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Gunakan ID dari link yang kamu berikan
 SHEET_ID = "1hd4yQ0-OfK7SbOMqdgWycb7kB2oNjzOPvfr8vveS-fM"
-URL_SHEET = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid=0"
+URL_SHEET = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit?usp=sharing"
 
 def load_data():
     try:
