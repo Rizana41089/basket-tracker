@@ -3,49 +3,48 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import os
 import time
-import shutil  # <-- TAMBAHAN PENTING: Untuk hapus folder
+import shutil
 from datetime import datetime
 
-# --- CONFIG ---
-NAMA_APLIKASI = "BIB Checklist Payment"
-st.set_page_config(page_title=NAMA_APLIKASI, layout="centered")
+# --- CONFIG ---------------------------------------------------------
+PAGE_TITLE = "BIB Checklist Payment"
+st.set_page_config(page_title=PAGE_TITLE, layout="centered")
 
-# --- DEFINISI FOLDER PENYIMPANAN (Supaya tidak error 'not defined') ---
+# Folder penyimpanan sementara foto
 base_tmp_dir = "proof_images"
 if not os.path.exists(base_tmp_dir):
     os.makedirs(base_tmp_dir)
 
-# URL Google Sheet kamu (Pastikan URL ini benar dan Sheet-nya tidak dikunci)
+# --- PENTING: URL SHEET HARUS ADA ---
+# Pastikan URL ini sesuai dengan Google Sheet kamu
 SQL_URL = "https://docs.google.com/spreadsheets/d/1hd4yQ0-OfK7SbOMqdgWycb7kB2oNjzOPvfr8vveS-fM/edit?usp=sharing"
 
-# --- KONEKSI GOOGLE SHEETS ---
+# --- KONEKSI GOOGLE SHEETS ------------------------------------------
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        # Mengambil data dari Google Sheets (ttl=0 biar tidak cache lama)
+        # Mengambil data spesifik dari Sheet1
         return conn.read(spreadsheet=SQL_URL, worksheet="Sheet1", ttl=0)
     except Exception as e:
-        st.error(f"Gagal load data: {e}")
+        # Jika gagal, kembalikan dataframe kosong agar app tidak crash
         return pd.DataFrame(columns=["Date", "Field_Name", "Player_Name", "Status", "Timestamp"])
 
 def save_data(df):
     try:
-        # Mengupdate data ke Google Sheets
+        # PERBAIKAN DI SINI: Harus menyebutkan spreadsheet dan worksheet
         conn.update(spreadsheet=SQL_URL, worksheet="Sheet1", data=df)
-        st.cache_data.clear() # Clear cache internal streamlit
+        st.cache_data.clear()
         return True
     except Exception as e:
-        st.error(f"Gagal menyimpan data! Pastikan Service Account sudah jadi EDITOR di Google Sheet.\nError: {e}")
+        st.error(f"Gagal menyimpan data! Error: {e}")
         return False
 
 # --- FILE & FOTO FUNCTIONS ------------------------------------------
 def get_match_folder(date_str, field_name):
-    # Membersihkan string agar aman jadi nama folder
     safe_date = str(date_str).replace("/", "-")
     safe_field = "".join([c for c in field_name if c.isalnum() or c == " "]).replace(" ", "_")
     folder_path = f"{base_tmp_dir}/{safe_date}_{safe_field}"
-    
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
     return folder_path
@@ -68,32 +67,29 @@ def show_update_modal(player_list, match_date, field_name):
     if st.button("Konfirmasi Pembayaran", type="primary"):
         df_all = load_data()
         
-        # Cek apakah data kosong
-        if df_all.empty:
-            st.error("Data tidak ditemukan atau gagal dimuat.")
-            return
-
-        # Update Logic
-        mask = (df_all['Date'].astype(str) == str(match_date)) & (df_all['Player_Name'] == who)
+        # Pastikan kolom Date dibaca sebagai string untuk pencocokan
+        df_all['Date'] = df_all['Date'].astype(str)
+        
+        mask = (df_all['Date'] == str(match_date)) & (df_all['Player_Name'] == who)
         
         if not df_all[mask].empty:
             df_all.loc[mask, 'Status'] = method
             df_all.loc[mask, 'Timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            # Save Image jika Transfer
+            # Simpan Foto jika Transfer
             if method == "💳 Transfer" and uploaded_file:
                 folder = get_match_folder(match_date, field_name)
                 file_path = get_proof_filename(folder, who)
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
             
-            # Save Data ke Sheets
+            # Simpan Data ke Excel/Sheets
             if save_data(df_all):
                 st.success(f"Berhasil! Terima kasih {who}.")
                 time.sleep(1)
                 st.rerun()
         else:
-            st.error("Data pemain tidak ditemukan di tanggal tersebut.")
+            st.error("Data error: Nama tidak ditemukan di tanggal tersebut.")
 
 # --- MODAL KONFIRMASI HAPUS (ADMIN) ---------------------------------
 @st.dialog("⚠️ Konfirmasi Hapus")
@@ -101,7 +97,7 @@ def confirm_delete_modal(match_date, field_name):
     st.warning(f"Apakah Anda yakin ingin menghapus jadwal **{match_date}**?")
     if st.button("Ya, Hapus Permanen", type="primary", use_container_width=True):
         df_all = load_data()
-        # Filter data selain tanggal yang dipilih
+        # Hapus baris berdasarkan tanggal
         new_df = df_all[df_all['Date'].astype(str) != str(match_date)]
         
         if save_data(new_df):
@@ -118,10 +114,7 @@ def confirm_delete_modal(match_date, field_name):
 # --- MODAL PREVIEW BUKTI --------------------------------------------
 @st.dialog("🔍 Detail Bukti")
 def show_image_preview(image_path, player_name):
-    if os.path.exists(image_path):
-        st.image(image_path, use_container_width=True, caption=f"Bukti Transfer: {player_name}")
-    else:
-        st.error("File gambar tidak ditemukan (mungkin terhapus server).")
+    st.image(image_path, use_container_width=True, caption=f"Bukti Transfer: {player_name}")
 
 # --- MAIN LOGIC ---
 query_params = st.query_params
@@ -142,22 +135,16 @@ if not is_player_mode:
 
         t_a, t_b = st.tabs(["➕ Buat Match", "📂 Manage & Bukti"])
         
+        # TAB BUAT MATCH
         with t_a:
             with st.form("new"):
                 d_in = st.date_input("Tanggal")
                 f_in = st.text_input("Lapangan", "GOR")
-                n_in = st.text_area("List Nama (Paste WA)", help="Format: 1. Nama\n2. Nama")
-                
+                n_in = st.text_area("List Nama (Paste WA)")
                 if st.form_submit_button("🚀 Generate Match"):
                     if n_in:
-                        # Parsing nama lebih robust
                         lines = n_in.split('\n')
-                        names = []
-                        for l in lines:
-                            # Hapus angka di depan, titik, dan spasi
-                            clean_name = ''.join([i for i in l if not i.isdigit() and i != '.']).strip()
-                            if clean_name:
-                                names.append(clean_name)
+                        names = [''.join([i for i in l if not i.isdigit() and i != '.']).strip() for l in lines if l.strip()]
                         
                         if names:
                             new_rows = pd.DataFrame({
@@ -168,89 +155,73 @@ if not is_player_mode:
                                 "Timestamp": [datetime.now().strftime("%Y-%m-%d")]*len(names)
                             })
                             
-                            if df.empty:
-                                combined_df = new_rows
-                            else:
-                                combined_df = pd.concat([df, new_rows], ignore_index=True)
-                            
+                            combined_df = pd.concat([df, new_rows], ignore_index=True)
                             if save_data(combined_df):
-                                st.success(f"Berhasil membuat jadwal untuk {len(names)} pemain!")
+                                st.success("Berhasil disimpan ke Cloud!")
                                 time.sleep(1)
                                 st.rerun()
-                        else:
-                            st.warning("Tidak ada nama yang terdeteksi.")
         
+        # TAB MANAGE (ADMIN MELIHAT DATA)
         with t_b:
-            st.header("📂 Kelola Jadwal & Bukti")
             if not df.empty and 'Date' in df.columns:
-                unique_dates = df['Date'].unique()
-                all_d = sorted(unique_dates, reverse=True)
+                # Pastikan date diurutkan dengan benar
+                df['Date'] = df['Date'].astype(str)
+                all_d = sorted(df['Date'].unique(), reverse=True)
+                sel_h = st.selectbox("Pilih Jadwal:", all_d)
                 
-                # Pilih Tanggal
-                sel_h = st.selectbox("Pilih Tanggal Jadwal:", all_d)
-                
-                # Filter Data
-                h_data = df[df['Date'] == sel_h]
-                
-                # --- [BARU] TAMPILKAN TABEL DATA PEMAIN DI SINI ---
-                st.write(f"📊 Status Pemain: **{len(h_data)} orang**")
-                # Mewarnai tabel biar gampang lihat yang lunas
-                def highlight_status(val):
-                    color = '#d4edda' if val in ['💵 Cash', '💳 Transfer'] else ''
-                    return f'background-color: {color}'
-                
-                st.dataframe(
-                    h_data.style.applymap(highlight_status, subset=['Status']),
-                    use_container_width=True,
-                    hide_index=True
-                )
-                # --------------------------------------------------
-
-                st.caption("Copy link ini untuk disebar ke grup WA:")
                 st.code(f"?view=player&date={sel_h}")
                 st.divider()
                 
-                if not h_data.empty:
-                    f_h_name = h_data['Field_Name'].iloc[0]
-                    m_folder = get_match_folder(sel_h, f_h_name)
-                    p_transfer = h_data[h_data['Status'] == "💳 Transfer"]['Player_Name'].tolist()
-                    
-                    if p_transfer:
-                        st.subheader(f"📸 Cek Bukti Transfer ({len(p_transfer)})")
-                        cols = st.columns(3)
-                        for idx, p in enumerate(p_transfer):
-                            f_p = get_proof_filename(m_folder, p)
+                h_data = df[df['Date'] == sel_h]
+                
+                # --- PERBAIKAN: MENAMPILKAN TABEL DI SINI ---
+                st.write(f"📊 Data Pemain ({len(h_data)})")
+                
+                # Fungsi styling sederhana untuk highlight yang sudah bayar
+                def highlight_status(val):
+                    return 'background-color: #d4edda' if val in ["💵 Cash", "💳 Transfer"] else ''
+
+                st.dataframe(
+                    h_data.style.applymap(highlight_status, subset=['Status']),
+                    use_container_width=True, 
+                    hide_index=True
+                )
+                # --------------------------------------------
+                
+                f_h_name = h_data['Field_Name'].iloc[0]
+                m_folder = get_match_folder(sel_h, f_h_name)
+                p_transfer = h_data[h_data['Status'] == "💳 Transfer"]['Player_Name'].tolist()
+                
+                if p_transfer:
+                    st.write("📸 Bukti Transfer:")
+                    cols = st.columns(3)
+                    for idx, p in enumerate(p_transfer):
+                        f_p = get_proof_filename(m_folder, p)
+                        if os.path.exists(f_p):
                             with cols[idx % 3]:
-                                if os.path.exists(f_p):
-                                    st.image(f_p, caption=p)
-                                    if st.button(f"🔍 Zoom {p}", key=f"adm_{p}"):
-                                        show_image_preview(f_p, p)
-                                else:
-                                    st.warning(f"Foto {p} hilang (restart server)")
-                    else:
-                        st.info("Belum ada yang upload bukti transfer hari ini.")
+                                st.image(f_p)
+                                if st.button("🔍", key=f"adm_{p}"):
+                                    show_image_preview(f_p, p)
                 
                 st.divider()
                 if st.button(f"🗑️ Hapus Jadwal {sel_h}", type="secondary", use_container_width=True):
                     confirm_delete_modal(sel_h, f_h_name)
             else:
-                st.info("Belum ada data jadwal. Silakan buat di Tab 'Buat Match' dulu.")
+                st.info("Belum ada data jadwal.")
 
 # --- 2. PLAYER VIEW ---
-# Tampilan jika user membuka link khusus
-else: 
+else: # View Mode Player
     if df.empty:
         st.info("👋 Belum ada match aktif.")
     else:
-        # Konversi kolom Date ke string untuk pencocokan yang aman
         df['Date'] = df['Date'].astype(str)
         available_dates = sorted(df['Date'].unique(), reverse=True)
         
-        # Cek apakah parameter tanggal valid
+        # Logic pilih tanggal
         if target_date_param in available_dates:
             selected_date = target_date_param
         else:
-            selected_date = st.selectbox("📅 Pilih Tanggal Main:", available_dates)
+            selected_date = st.selectbox("📅 Jadwal:", available_dates)
         
         curr = df[df['Date'] == selected_date].copy()
         
@@ -258,35 +229,21 @@ else:
             f_name = curr['Field_Name'].iloc[0]
             folder = get_match_folder(selected_date, f_name)
 
-            st.title(f"🏀 {NAMA_APLIKASI}")
-            st.info(f"📍 {f_name} | 📅 {selected_date}")
+            st.title(f"🏀 {PAGE_TITLE}")
+            st.caption(f"📍 Lapangan: {f_name} | 📅 Tanggal: {selected_date}")
 
-            # Detect Lunas Logic
+            # Detect Lunas
             curr['Lunas'] = False
             for i, r in curr.iterrows():
-                # Lunas jika upload bukti (ada file) ATAU status Cash/Transfer
-                has_proof = os.path.exists(get_proof_filename(folder, r['Player_Name']))
-                is_paid_status = r['Status'] in ["💵 Cash", "💳 Transfer"]
-                
-                if has_proof or is_paid_status:
+                if os.path.exists(get_proof_filename(folder, r['Player_Name'])) or r['Status'] == "💵 Cash":
                     curr.at[i, 'Lunas'] = True
 
-            # Tombol Aksi
             yet_to_pay = curr[curr['Lunas'] == False]['Player_Name'].tolist()
             if yet_to_pay:
                 if st.button("💳 LAPOR BAYAR / UPLOAD BUKTI", type="primary", use_container_width=True):
                     show_update_modal(yet_to_pay, selected_date, f_name)
             else:
-                st.success("🎉 Wih mantap! Semua pemain sudah lunas!")
+                st.success("🎉 Semua pemain lunas!")
 
-            # Tampilkan Tabel Status
-            display_df = curr[["Player_Name", "Status"]].reset_index(drop=True)
-            
-            # Styling sederhana (Highlight status)
-            st.dataframe(
-                display_df.style.apply(lambda x: ['background-color: #d4edda' if v in ['💵 Cash', '💳 Transfer'] else '' for v in x], subset=['Status']),
-                hide_index=True, 
-                use_container_width=True
-            )
-        else:
-            st.warning("Data match tanggal ini error.")
+            # Tampilkan Tabel untuk Player
+            st.dataframe(curr[["Player_Name", "Status"]], hide_index=True, use_container_width=True)
