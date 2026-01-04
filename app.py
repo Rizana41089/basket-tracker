@@ -195,3 +195,8 @@ else:
         st.success("🎉 Semua pemain lunas!")
 
     st.dataframe(curr[["Player_Name", "Status"]], hide_index=True, use_container_width=True)
+
+# Footer Info
+    done = curr[curr['Lunas'] == True]['Player_Name'].tolist()
+    if done:
+        st.caption(f"✅ Terverifikasi: {', '.join(done)}")
