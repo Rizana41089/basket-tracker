@@ -168,56 +168,52 @@ if not is_player_mode:
                     confirm_delete_modal(sel_h, f_h_name)
 
 # --- 2. PLAYER VIEW (TAMPILAN DEPAN) --------------------------------
+if df.empty:
+    st.info("👋 Belum ada match aktif.")
 else:
-    if df.empty:
-        st.info("👋 Belum ada match aktif.")
+    available_dates = sorted(df['Date'].unique(), reverse=True)
+    
+    if target_date_param and target_date_param in available_dates:
+        selected_date = target_date_param
     else:
-        df['Date'] = df['Date'].astype(str)
-        available_dates = sorted(df['Date'].unique(), reverse=True)
-        
-        if target_date_param and target_date_param in available_dates:
-            selected_date = target_date_param
-        else:
-            col_s, _ = st.columns([2,1])
-            with col_s:
-                selected_date = st.selectbox("📅 Jadwal Main:", available_dates)
-        
-        curr = df[df['Date'] == selected_date].copy()
-        
-        if not curr.empty:
-            f_name = curr['Field_Name'].iloc[0]
-            folder = get_match_folder(selected_date, f_name)
+        col_s, _ = st.columns([2,1])
+        with col_s:
+            selected_date = st.selectbox("📅 Jadwal Main:", available_dates)
+    
+    curr = df[df['Date'] == selected_date].copy()
+    f_name = curr['Field_Name'].iloc[0]
+    folder = get_match_folder(selected_date, f_name)
 
-            # Header
-            st.title(f"🏀 {PAGE_TITLE}")
-            st.caption(f"📍 Lapangan: {f_name} | 📅 Tanggal: {selected_date}")
+    # Header
+    st.title(f"🏀 {PAGE_TITLE}")
+    st.caption(f"📍 Lapangan: {f_name} | 📅 Tanggal: {selected_date}")
 
-            # Locking Detection
-            curr['Lunas'] = False
-            for i, r in curr.iterrows():
-                if os.path.exists(get_proof_filename(folder, r['Player_Name'])) or r['Status'] == "💵 Cash":
-                    curr.at[i, 'Lunas'] = True
+    # Locking Detection
+    curr['Lunas'] = False
+    for i, r in curr.iterrows():
+        if os.path.exists(get_proof_filename(folder, r['Player_Name'])) or r['Status'] == "💵 Cash":
+            curr.at[i, 'Lunas'] = True
 
-            # Tombol Lapor
-            yet_to_pay = curr[curr['Lunas'] == False]['Player_Name'].tolist()
-            if yet_to_pay:
-                if st.button("💳 LAPOR BAYAR / UPLOAD BUKTI", type="primary", use_container_width=True):
-                    show_update_modal(yet_to_pay, selected_date, f_name)
-            else:
-                st.success("🎉 Semua pemain di jadwal ini sudah lunas!")
+    # Tombol Lapor
+    yet_to_pay = curr[curr['Lunas'] == False]['Player_Name'].tolist()
+    if yet_to_pay:
+        if st.button("💳 LAPOR BAYAR / UPLOAD BUKTI", type="primary", use_container_width=True):
+            show_update_modal(yet_to_pay, selected_date, f_name)
+    else:
+        st.success("🎉 Semua pemain di jadwal ini sudah lunas!")
 
-            st.divider()
+    st.divider()
 
-            # Tabel Status
-            st.write("📋 **Status Pembayaran:**")
-            st.dataframe(
-                curr[["Player_Name", "Status"]],
-                column_config={"Player_Name": "Nama Pemain", "Status": "Status"},
-                hide_index=True,
-                use_container_width=True
-            )
-            
-            # Footer Info
-            done = curr[curr['Lunas'] == True]['Player_Name'].tolist()
-            if done:
-                st.caption(f"✅ Terverifikasi: {', '.join(done)}")
+    # Tabel Status
+    st.write("📋 **Status Pembayaran:**")
+    st.dataframe(
+        curr[["Player_Name", "Status"]],
+        column_config={"Player_Name": "Nama Pemain", "Status": "Status"},
+        hide_index=True,
+        use_container_width=True
+    )
+    
+    # Footer Info
+    done = curr[curr['Lunas'] == True]['Player_Name'].tolist()
+    if done:
+        st.caption(f"✅ Terverifikasi: {', '.join(done)}")
