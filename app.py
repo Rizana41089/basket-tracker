@@ -181,21 +181,34 @@ if not is_player_mode:
                             st.warning("Tidak ada nama yang terdeteksi.")
         
         with t_b:
+            st.header("📂 Kelola Jadwal & Bukti")
             if not df.empty and 'Date' in df.columns:
                 unique_dates = df['Date'].unique()
-                # Pastikan tanggal diurutkan
                 all_d = sorted(unique_dates, reverse=True)
                 
-                sel_h = st.selectbox("Pilih Jadwal:", all_d)
+                # Pilih Tanggal
+                sel_h = st.selectbox("Pilih Tanggal Jadwal:", all_d)
                 
-                # Tampilkan Link untuk dicopy
-                # (Di local: localhost, di Cloud: alamat app kamu)
-                st.caption("Copy link ini untuk pemain:")
+                # Filter Data
+                h_data = df[df['Date'] == sel_h]
+                
+                # --- [BARU] TAMPILKAN TABEL DATA PEMAIN DI SINI ---
+                st.write(f"📊 Status Pemain: **{len(h_data)} orang**")
+                # Mewarnai tabel biar gampang lihat yang lunas
+                def highlight_status(val):
+                    color = '#d4edda' if val in ['💵 Cash', '💳 Transfer'] else ''
+                    return f'background-color: {color}'
+                
+                st.dataframe(
+                    h_data.style.applymap(highlight_status, subset=['Status']),
+                    use_container_width=True,
+                    hide_index=True
+                )
+                # --------------------------------------------------
+
+                st.caption("Copy link ini untuk disebar ke grup WA:")
                 st.code(f"?view=player&date={sel_h}")
                 st.divider()
-                
-                # Filter data berdasarkan tanggal terpilih
-                h_data = df[df['Date'] == sel_h]
                 
                 if not h_data.empty:
                     f_h_name = h_data['Field_Name'].iloc[0]
@@ -203,7 +216,7 @@ if not is_player_mode:
                     p_transfer = h_data[h_data['Status'] == "💳 Transfer"]['Player_Name'].tolist()
                     
                     if p_transfer:
-                        st.write(f"📸 Bukti Transfer ({len(p_transfer)})")
+                        st.subheader(f"📸 Cek Bukti Transfer ({len(p_transfer)})")
                         cols = st.columns(3)
                         for idx, p in enumerate(p_transfer):
                             f_p = get_proof_filename(m_folder, p)
@@ -213,15 +226,15 @@ if not is_player_mode:
                                     if st.button(f"🔍 Zoom {p}", key=f"adm_{p}"):
                                         show_image_preview(f_p, p)
                                 else:
-                                    st.warning(f"Foto {p} hilang")
+                                    st.warning(f"Foto {p} hilang (restart server)")
                     else:
-                        st.info("Belum ada yang upload bukti transfer.")
+                        st.info("Belum ada yang upload bukti transfer hari ini.")
                 
                 st.divider()
                 if st.button(f"🗑️ Hapus Jadwal {sel_h}", type="secondary", use_container_width=True):
                     confirm_delete_modal(sel_h, f_h_name)
             else:
-                st.info("Belum ada data jadwal.")
+                st.info("Belum ada data jadwal. Silakan buat di Tab 'Buat Match' dulu.")
 
 # --- 2. PLAYER VIEW ---
 # Tampilan jika user membuka link khusus
